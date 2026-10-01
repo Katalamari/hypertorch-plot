@@ -82,11 +82,11 @@ def main() -> None:
 
     model_configs = [ModelConfig(name="mlp", version="mean", model=model)]
 
-    # 3-epoch experiment to populate experiment metrics
-    print("\nTraining MLP model for 3 epochs...")
+    # 15-epoch experiment to populate experiment metrics
+    print("\nTraining MLP model for 15 epochs...")
     with MultiModelTrainer(
         model_configs=model_configs,
-        max_epochs=3,
+        max_epochs=15,
         accelerator="auto",
         devices=1,
         log_every_n_steps=1,
@@ -111,15 +111,6 @@ def main() -> None:
     print("Generating line plots...")
     plotter = LinePlotter()
     saved_plots = plotter.plot(metrics)
-
-    print(f"\nGenerated {len(saved_plots)} plot(s):")
-    for plot_path in saved_plots:
-        print(f" -> {Path(plot_path).resolve()}")
-
-    # Instantiating ScatterPlotter to plot metrics
-    print("Generating scatter plots...")
-    sc_plotter = ScatterPlotter()
-    saved_plots = sc_plotter.plot(metrics)
 
     print(f"\nGenerated {len(saved_plots)} plot(s):")
     for plot_path in saved_plots:

@@ -51,6 +51,7 @@ class LogParser:
         self._latest_experiment_dir = None
         self._latest_csv_file = None
 
+    ## Add parse_latest and parse_multiple_latests
     def parse(self, csv_path: str | Path | None = None) -> ParsedMetrics:
         """Loads and reshapes experiment metrics into a ParsedMetrics container.
 
