@@ -43,7 +43,7 @@ class BarChartPlotter(Plotter):
         Returns:
             saved_plots: List of file paths to generated PNG images.
         """
-        plt = self._init_plotting()
+        plt = self._init_charting()
         metrics_list = self._normalize_metrics(metrics)
         self._validate_metrics_list(metrics_list)
 

@@ -62,6 +62,28 @@ class Plotter(ABC):
         plt.style.use("seaborn-v0_8-whitegrid")
         return plt
 
+    @classmethod
+    def _init_charting(cls) -> Any:
+        """
+        Validate plotting dependencies and configure matplotlib backend.
+
+        Returns:
+            modules: matplotlib.pyplot
+
+        Raises:
+            ImportError: If matplotlib is not installed.
+        """
+        if not cls._is_plotting_available():
+            raise ImportError(
+                "Plotting dependencies are not available. "
+                "Install them with `pip install hypertorch[plotting]`"
+            )
+        matplotlib = importlib.import_module("matplotlib")
+        matplotlib.use("Agg")
+        plt = importlib.import_module("matplotlib.pyplot")
+        plt.style.use("seaborn-v0_8-white")
+        return plt
+
     @staticmethod
     def _format_label(name: str) -> str:
         """
