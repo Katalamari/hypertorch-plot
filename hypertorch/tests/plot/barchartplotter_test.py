@@ -22,6 +22,10 @@ def mock_plotting_backend(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         widths = args[1] if len(args) > 1 else kwargs.get("width", [])
         return [MagicMock() for _ in range(len(widths))]
 
+    def fake_bar(*args: Any, **kwargs: Any) -> list[MagicMock]:
+        heights = args[1] if len(args) > 1 else kwargs.get("height", [])
+        return [MagicMock() for _ in range(len(heights))]
+
     def fake_subplots(*args: Any, **kwargs: Any) -> tuple[MagicMock, Any]:
         fig = MagicMock()
         if kwargs.get("squeeze") is False or (args and len(args) >= 2):
@@ -29,6 +33,7 @@ def mock_plotting_backend(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
             for _ in range(12):
                 ax = MagicMock()
                 ax.barh.side_effect = fake_barh
+                ax.bar.side_effect = fake_bar
                 axes_list.append(ax)
             ax_container = MagicMock()
             ax_container.flatten.return_value = axes_list
@@ -36,6 +41,7 @@ def mock_plotting_backend(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
         ax = MagicMock()
         ax.barh.side_effect = fake_barh
+        ax.bar.side_effect = fake_bar
         return fig, ax
 
     mock_plt.subplots.side_effect = fake_subplots
@@ -79,40 +85,39 @@ def test_barchart_calculate_grid_dims(n_plots: int, expected_dims: tuple[int, in
     assert BarChartPlotter._calculate_grid_dims(n_plots) == expected_dims
 
 
-def test_barchart_resolve_x_limits_empty_and_zero_baseline() -> None:
+def test_barchart_resolve_axis_limits_empty_and_zero_baseline() -> None:
     plotter_zero = BarChartPlotter(zero_baseline=True)
-    assert plotter_zero._resolve_x_limits([]) == (0.0, 1.0)
+    assert plotter_zero._resolve_axis_limits([]) == (0.0, 1.0)
 
-    left_pos, right_pos = plotter_zero._resolve_x_limits([0.631, 0.694])
-    assert left_pos == 0.0
-    assert right_pos == pytest.approx(0.694 * 1.18)
+    low_pos, high_pos = plotter_zero._resolve_axis_limits([0.631, 0.694])
+    assert low_pos == 0.0
+    assert high_pos == pytest.approx(0.694 * 1.18)
 
-    left_neg, right_neg = plotter_zero._resolve_x_limits([-0.5, -0.2])
-    assert left_neg == pytest.approx(-0.5 * 1.15)
-    assert right_neg == 1.0
+    low_neg, high_neg = plotter_zero._resolve_axis_limits([-0.5, -0.2])
+    assert low_neg == pytest.approx(-0.5 * 1.15)
+    assert high_neg == 1.0
 
-    # Zero span (identical scores) falls back to zero-baseline logic even if zero_baseline=False
     plotter_zoom = BarChartPlotter(zero_baseline=False)
-    left_flat, right_flat = plotter_zoom._resolve_x_limits([0.75, 0.75])
-    assert left_flat == 0.0
-    assert right_flat == pytest.approx(0.75 * 1.18)
+    low_flat, high_flat = plotter_zoom._resolve_axis_limits([0.75, 0.75])
+    assert low_flat == 0.0
+    assert high_flat == pytest.approx(0.75 * 1.18)
 
 
-def test_barchart_resolve_x_limits_dynamic_zoom() -> None:
+def test_barchart_resolve_axis_limits_dynamic_zoom() -> None:
     plotter = BarChartPlotter(zero_baseline=False)
-    x_left, x_right = plotter._resolve_x_limits([0.631, 0.691, 0.694])
-    assert 0.50 < x_left < 0.631
-    assert 0.694 < x_right < 0.85
+    low, high = plotter._resolve_axis_limits([0.631, 0.691, 0.694])
+    assert 0.50 < low < 0.631
+    assert 0.694 < high < 0.85
 
-    neg_left, neg_right = plotter._resolve_x_limits([-0.40, -0.35])
-    assert neg_left < -0.40
-    assert neg_right > -0.35
+    neg_low, neg_high = plotter._resolve_axis_limits([-0.40, -0.35])
+    assert neg_low < -0.40
+    assert neg_high > -0.35
 
 
 """ Annotation & Strict Zip Validation Tests """
 
 
-def test_barchart_annotate_bars_skips_nan() -> None:
+def test_barchart_annotate_bars_skips_nan_and_supports_vertical() -> None:
     mock_ax = MagicMock()
     bars = [MagicMock(), MagicMock()]
     BarChartPlotter._annotate_bars(
@@ -120,8 +125,22 @@ def test_barchart_annotate_bars_skips_nan() -> None:
         bars=bars,
         values=[0.8123, np.nan],
         offset=0.01,
+        orientation="horizontal",
     )
     mock_ax.text.assert_called_once()
+
+    mock_ax.reset_mock()
+    BarChartPlotter._annotate_bars(
+        ax=mock_ax,
+        bars=bars,
+        values=[0.8123, np.nan],
+        offset=0.01,
+        orientation="vertical",
+    )
+    mock_ax.text.assert_called_once()
+    _, kwargs = mock_ax.text.call_args
+    assert kwargs["va"] == "bottom"
+    assert kwargs["ha"] == "center"
 
 
 def test_barchart_annotate_bars_mismatch_raises_value_error() -> None:

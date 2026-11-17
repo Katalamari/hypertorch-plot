@@ -137,7 +137,7 @@ def main() -> None:
         trainer.fit_all(train_dataloader=train_loader, val_dataloader=val_loader)
         trainer.test_all(dataloader=test_loader)
 
-    """Scatterplot implementation here."""
+    """barchart implementation here."""
 
     print("\nParsing experiment metrics...")
     parser = LogParser()
@@ -146,12 +146,11 @@ def main() -> None:
 
     print("Generating Train vs. Val generalization scatter plots...")
     plotter = BarChartPlotter()
-    averaged_runs = [metrics.average() for metrics in parsed_runs]
 
-    for metrics in averaged_runs:
+    for metrics in parsed_runs:
         print(f"Loaded run: '{metrics.experiment_name}' with metrics {metrics.names()}")
 
-    saved_plots = plotter.plot(averaged_runs)
+    saved_plots = plotter.plot(parsed_runs)
 
     print(f"\nGenerated {len(saved_plots)} plot(s):")
     for plot_path in saved_plots:
