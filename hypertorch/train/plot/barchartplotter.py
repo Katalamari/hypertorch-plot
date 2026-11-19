@@ -42,6 +42,9 @@ class BarChartPlotter(Plotter):
 
         Returns:
             saved_plots: List of file paths to generated PNG images.
+        
+        Raises:
+            ImportError: If matplotlib is not installed.
         """
         plt = self._init_charting()
         metrics_list = self._normalize_metrics(metrics)
