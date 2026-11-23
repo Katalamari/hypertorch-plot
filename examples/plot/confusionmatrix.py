@@ -22,7 +22,6 @@ from hypertorch.types import ModelConfig
 
 
 class MulticlassCMCell(MulticlassConfusionMatrix):
-    """Logs a single scalar cell (row, col) of a multiclass confusion matrix."""
 
     def __init__(self, num_classes: int, row: int, col: int) -> None:
         super().__init__(num_classes=num_classes)
@@ -34,7 +33,6 @@ class MulticlassCMCell(MulticlassConfusionMatrix):
 
 
 def build_multiclass_metrics(num_classes: int) -> MetricCollection:
-    """Create a MetricCollection with standard metrics and individual cm_{i}_{j} cells."""
     metric_dict: dict[str, object] = {
         "accuracy": MulticlassAccuracy(num_classes=num_classes, average="macro"),
         "f1": MulticlassF1Score(num_classes=num_classes, average="macro"),
