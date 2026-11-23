@@ -52,7 +52,7 @@ def build_multiclass_metrics(num_classes: int) -> MetricCollection:
 
 def main() -> None:
     num_workers = 4
-    num_features = 32
+    pe_features = 32
 
     print("Loading and preparing multiclass node-classification dataset (cora)...")
     dataset = CoraDataset(sampling_strategy="node", task="node-classification")
@@ -71,13 +71,16 @@ def main() -> None:
     print("Enriching node features...")
     train_dataset.enrich_node_features(
         enricher=LaplacianPositionalEncodingEnricher(
-            num_features=num_features,
+            num_features=pe_features,
             num_nodes=dataset.hdata.num_nodes,
         ),
-        enrichment_mode="replace",
+        enrichment_mode="concatenate",
     )
     val_dataset.enrich_node_features_from(train_dataset)
     test_dataset.enrich_node_features_from(train_dataset)
+
+    in_channels = int(train_dataset.hdata.x.shape[1])
+    print(f"Total node feature dimension: {in_channels}")
 
     print("Creating dataloaders...")
     train_loader = DataLoader(
@@ -104,11 +107,11 @@ def main() -> None:
 
     model = GCNClassifier(
         classifier_config={
-            "in_channels": num_features,
-            "hidden_channels": 32,
+            "in_channels": in_channels,
+            "hidden_channels": 64,
             "out_channels": num_classes,
             "num_layers": 2,
-            "drop_rate": 0.1,
+            "drop_rate": 0.5,
             "graph_reduction_strategy": "clique_expansion",
             "num_nodes": dataset.hdata.num_nodes,
         },
@@ -131,7 +134,7 @@ def main() -> None:
     print("Starting training and evaluation...")
     with MultiModelTrainer(
         model_configs=configs,
-        max_epochs=10,
+        max_epochs=30,
         accelerator="auto",
         log_every_n_steps=1,
         enable_checkpointing=False,
