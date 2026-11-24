@@ -243,9 +243,9 @@ class ConfusionMatrixPlotter(Plotter):
             cell_fontsize = 10.0 if num_classes <= 3 else (8.5 if num_classes <= 6 else 7.5)
             for row in range(num_classes):
                 for col in range(num_classes):
-                    count_val = int(round(matrix[row, col]))
-                    pct_val = norm_matrix[row, col] * 100.0
-                    text_color = "white" if norm_matrix[row, col] > 0.55 else "black"
+                    count_val: int = round(matrix[row, col])
+                    pct_val: int = norm_matrix[row, col] * 100.0
+                    text_color: str = "white" if norm_matrix[row, col] > 0.55 else "black"
                     ax.text(
                         col,
                         row,

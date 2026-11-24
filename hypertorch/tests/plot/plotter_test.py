@@ -37,6 +37,7 @@ def test_plotter_init_plotting_success() -> None:
     plt = Plotter._init_plotting()
     assert plt is not None
 
+
 def test_plotter_init_chatring_success() -> None:
     plt = Plotter._init_charting()
     assert plt is not None
@@ -46,6 +47,7 @@ def test_plotter_init_plotting_missing_raises_import_error(monkeypatch: pytest.M
     monkeypatch.setattr(Plotter, "_is_plotting_available", staticmethod(lambda: False))
     with pytest.raises(ImportError, match="Plotting dependencies are not available"):
         Plotter._init_plotting()
+
 
 def test_plotter_init_charting_missing_raises_import_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(Plotter, "_is_plotting_available", staticmethod(lambda: False))

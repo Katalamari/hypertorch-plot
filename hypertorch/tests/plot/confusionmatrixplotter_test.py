@@ -29,7 +29,7 @@ def _make_parsed_metrics(
 
 def _make_df(rows: list[tuple[int, str, float]]) -> pd.DataFrame:
     """Build a metric DataFrame with (epoch, split, value) rows."""
-    return pd.DataFrame(rows, columns=["epoch", "split", "value"])
+    return pd.DataFrame(rows, columns=pd.Index(["epoch", "split", "value"]))
 
 
 def _make_binary_metrics(
@@ -121,6 +121,7 @@ def test_detect_matrix_mode_raises_on_unrelated_metrics(tmp_path: Path) -> None:
 
 """ Grid dimensions & matrix extraction"""
 
+
 @pytest.mark.parametrize(
     ("n_plots", "expected"),
     [
@@ -201,10 +202,7 @@ def test_plot_single_multiclass_run(tmp_path: Path, num_classes: int) -> None:
 
 
 def test_plot_multi_run_comparison_grid(tmp_path: Path) -> None:
-    runs = [
-        _make_binary_metrics(tmp_path, experiment_name=f"model_{i}")
-        for i in range(5)
-    ]
+    runs = [_make_binary_metrics(tmp_path, experiment_name=f"model_{i}") for i in range(5)]
     plotter = ConfusionMatrixPlotter()
 
     saved = plotter.plot(runs, output_dir=tmp_path)
@@ -286,6 +284,11 @@ def test_fetch_last_split_value_returns_none_when_filtered_df_empty(tmp_path: Pa
         def __str__(self) -> str:
             return "val"
 
-    frames = {"tp": pd.DataFrame([(0, _SplitWrapper(), 10.0)], columns=["epoch", "split", "value"])}
+    frames = {
+        "tp": pd.DataFrame(
+            [(0, _SplitWrapper(), 10.0)],
+            columns=pd.Index(["epoch", "split", "value"]),
+        )
+    }
     parsed = _make_parsed_metrics(frames, experiment_dir=tmp_path)
     assert ConfusionMatrixPlotter._fetch_last_split_value(parsed, "tp", "val") is None

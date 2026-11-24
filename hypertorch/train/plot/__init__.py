@@ -8,9 +8,9 @@ from .confusionmatrixplotter import ConfusionMatrixPlotter
 
 __all__ = [
     "BarChartPlotter",
+    "ConfusionMatrixPlotter",
     "LinePlotter",
     "LogParser",
     "Plotter",
     "ScatterPlotter",
-    "ConfusionMatrixPlotter",
 ]

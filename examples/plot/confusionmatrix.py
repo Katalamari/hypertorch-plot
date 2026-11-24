@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from torch import Tensor
-from torchmetrics import MetricCollection
+from torchmetrics import Metric, MetricCollection
 from torchmetrics.classification import (
     MulticlassAccuracy,
     MulticlassAUROC,
@@ -22,7 +22,6 @@ from hypertorch.types import ModelConfig
 
 
 class MulticlassCMCell(MulticlassConfusionMatrix):
-
     def __init__(self, num_classes: int, row: int, col: int) -> None:
         super().__init__(num_classes=num_classes)
         self.row = row
@@ -33,7 +32,7 @@ class MulticlassCMCell(MulticlassConfusionMatrix):
 
 
 def build_multiclass_metrics(num_classes: int) -> MetricCollection:
-    metric_dict: dict[str, object] = {
+    metric_dict: dict[str, Metric | MetricCollection] = {
         "accuracy": MulticlassAccuracy(num_classes=num_classes, average="macro"),
         "f1": MulticlassF1Score(num_classes=num_classes, average="macro"),
         "auc": MulticlassAUROC(num_classes=num_classes, average="macro"),
@@ -45,7 +44,7 @@ def build_multiclass_metrics(num_classes: int) -> MetricCollection:
                 row=i,
                 col=j,
             )
-    return MetricCollection(metric_dict)  # type: ignore[arg-type]
+    return MetricCollection(metric_dict)
 
 
 def main() -> None:

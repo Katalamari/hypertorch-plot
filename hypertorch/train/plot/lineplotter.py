@@ -29,7 +29,7 @@ class LinePlotter(Plotter):
 
         Returns:
             saved_plots: List of file paths to saved line plot PNG files.
-        
+
         Raises:
             ImportError: If matplotlib is not installed.
         """
