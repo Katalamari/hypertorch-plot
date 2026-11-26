@@ -16,8 +16,7 @@ from hypertorch.data import (
 )
 from hypertorch.node_classification import GCNClassifier
 from hypertorch.train import MultiModelTrainer
-from hypertorch.train.plot import LogParser
-from hypertorch.train.plot.confusionmatrixplotter import ConfusionMatrixPlotter
+from hypertorch.train.plot import LogParser, ConfusionMatrixPlotter
 from hypertorch.types import ModelConfig
 
 

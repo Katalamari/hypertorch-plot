@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from hypertorch.train.plot.confusionmatrixplotter import ConfusionMatrixPlotter
+from hypertorch.train.plot import ConfusionMatrixPlotter
 from hypertorch.types.parsed_metrics import ParsedMetrics
 
 
