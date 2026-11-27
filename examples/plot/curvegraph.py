@@ -244,11 +244,7 @@ def main() -> None:
 
     print("Generating curve plots (ROC, TOC, DET, PR, Calibration)...")
     plotter = CurveGraphPlotter(
-        roc=True,
-        toc=True,
-        det=True,
-        pr=True,
-        calibration=True,
+        roc=True, toc=True, det=True, pr=True, calibration=True, cumulative=True
     )
     saved_plots = plotter.plot(parsed_runs)
 

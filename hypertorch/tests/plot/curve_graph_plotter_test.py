@@ -187,11 +187,11 @@ def test_fetch_last_split_value_returns_none_when_filtered_df_empty(tmp_path: Pa
 
 def test_plot_all_curves_prefers_test_over_val(tmp_path: Path) -> None:
     parsed = _make_curve_metrics(tmp_path, experiment_name="gcn_all", splits=("val", "test"))
-    plotter = CurveGraphPlotter(roc=True, toc=True, det=True, pr=True, calibration=True)
+    plotter = CurveGraphPlotter(roc=True, toc=True, det=True, pr=True, calibration=True, cumulative=True)
 
     saved = plotter.plot(parsed)
 
-    assert len(saved) == 5
+    assert len(saved) == 6
     names = {p.name for p in saved}
     assert names == {
         "CurveGraph_ROC_test_gcn_all.png",
@@ -199,6 +199,7 @@ def test_plot_all_curves_prefers_test_over_val(tmp_path: Path) -> None:
         "CurveGraph_DET_test_gcn_all.png",
         "CurveGraph_TOC_test_gcn_all.png",
         "CurveGraph_Calibration_test_gcn_all.png",
+        "CurveGraph_Cumulative_test_gcn_all.png"
     }
     for path in saved:
         assert path.exists()

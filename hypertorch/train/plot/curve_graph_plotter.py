@@ -23,24 +23,16 @@ class CurveGraphPlotter(Plotter):
         det: bool = False,
         pr: bool = False,
         calibration: bool = False,
+        cumulative: bool = False,
     ) -> None:
         """
         Renders evaluation curves from logged metrics.
-        Currently supports ROC, TOC, DET, Precision-Recall, Calibratio.
-
-        Args:
-            roc: Whether to render Receiver Operating Characteristic (ROC) curves.
-            toc: Whether to render Total Operating Characteristic (TOC) curves.
-            det: Whether to render Detection Error Tradeoff (DET) curves.
-            pr: Whether to render Precision-Recall (PR) curves.
-            calibration: Whether to render Calibration (Reliability Diagram) curves.
-
-        Raises:
-            ValueError: If all curve flags are False.
+        Currently supports ROC, TOC, DET, Precision-Recall, Calibration, and Cumulative.
         """
-        if not any((roc, toc, det, pr, calibration)):
+        if not any((roc, toc, det, pr, calibration, cumulative)):
             raise ValueError(
-                "At least one curve type (roc, toc, det, pr, calibration) must be enabled."
+                "At least one curve type "
+                "(roc, toc, det, pr, calibration, cumulative) must be enabled."
             )
 
         self.roc: bool = roc
@@ -48,11 +40,12 @@ class CurveGraphPlotter(Plotter):
         self.det: bool = det
         self.pr: bool = pr
         self.calibration: bool = calibration
+        self.cumulative: bool = cumulative
 
     @property
     def _needs_threshold_metrics(self) -> bool:
-        """Return True if any threshold-based curve (ROC, TOC, DET, PR) is enabled."""
-        return any((self.roc, self.toc, self.det, self.pr))
+        """Return True if any threshold-based curve (ROC, TOC, DET, PR, Cumulative) is enabled."""
+        return any((self.roc, self.toc, self.det, self.pr, self.cumulative))
 
     def _validate_curve_requirements(
         self,
@@ -129,6 +122,7 @@ class CurveGraphPlotter(Plotter):
                     (self.pr, self._render_pr),
                     (self.det, self._render_det),
                     (self.toc, self._render_toc),
+                    (self.cumulative, self._render_cumulative),
                 )
                 saved_plots.extend(
                     render_fn(thresh_data, thresh_split, title_prefix, suffix, dest_dir, plt)
@@ -299,6 +293,79 @@ class CurveGraphPlotter(Plotter):
     def _trapezoid_area(y: np.ndarray, x: np.ndarray) -> float:
         """Compute area under curve via the trapezoidal rule (NumPy 1.x & 2.x safe)."""
         return float(np.sum(0.5 * (y[1:] + y[:-1]) * (x[1:] - x[:-1])))
+
+    def _render_cumulative(
+        self,
+        data: list[tuple[str, dict[str, np.ndarray]]],
+        split_name: str,
+        title_prefix: str,
+        suffix: str,
+        dest_dir: Path,
+        plt: Any,
+    ) -> Path:
+        """Render and save the Cumulative Distribution (ECDF / KS) curve."""
+        fig, ax = plt.subplots(figsize=(8.0, 5.5))
+
+        for idx, (run_label, arr) in enumerate(data):
+            tp, fp, tn, fn = arr["tp"], arr["fp"], arr["tn"], arr["fn"]
+            thresholds = np.linspace(0.0, 1.0, len(tp))
+
+            neg_cdf = np.divide(tn, fp + tn, out=np.zeros_like(tn), where=(fp + tn) != 0)
+            pos_cdf = np.divide(fn, tp + fn, out=np.zeros_like(fn), where=(tp + fn) != 0)
+
+            ks_diffs = np.abs(neg_cdf - pos_cdf)
+            ks_idx = int(np.argmax(ks_diffs))
+            ks_val = float(ks_diffs[ks_idx])
+
+            color = self.colourblind_palette[idx % len(self.colourblind_palette)]
+            marker = self.marker_succession[idx % len(self.marker_succession)]
+
+            ax.plot(
+                thresholds,
+                neg_cdf,
+                color=color,
+                linestyle="--",
+                marker=marker,
+                markersize=3.5,
+                linewidth=1.6,
+                label=f"{run_label} — Negative",
+            )
+            ax.plot(
+                thresholds,
+                pos_cdf,
+                color=color,
+                linestyle="-",
+                marker=marker,
+                markersize=3.5,
+                linewidth=1.8,
+                label=f"{run_label} — Positive (KS = {ks_val:.4f})",
+            )
+            ax.vlines(
+                x=float(thresholds[ks_idx]),
+                ymin=float(min(neg_cdf[ks_idx], pos_cdf[ks_idx])),
+                ymax=float(max(neg_cdf[ks_idx], pos_cdf[ks_idx])),
+                colors=color,
+                linestyles=":",
+                linewidth=1.4,
+                alpha=0.85,
+            )
+
+        ax.set_xlim(0.0, 1.0)
+        ax.set_ylim(0.0, 1.02)
+        ax.set_xlabel("Score Threshold")
+        ax.set_ylabel("Cumulative Proportion")
+        ax.set_title(
+            f"{title_prefix} — Cumulative Distribution / KS ({split_name.capitalize()})",
+            fontsize=12,
+            pad=10,
+        )
+        ax.legend(loc="lower right", framealpha=0.85)
+
+        out_path = dest_dir / f"CurveGraph_Cumulative_{split_name}_{suffix}.png"
+        plt.tight_layout()
+        plt.savefig(out_path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+        return out_path
 
     def _render_roc(
         self,
