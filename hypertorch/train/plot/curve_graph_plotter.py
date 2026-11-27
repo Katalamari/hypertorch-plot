@@ -11,10 +11,10 @@ from hypertorch.types.parsed_metrics import ParsedMetrics
 
 
 class CurveGraphPlotter(Plotter):
-    """Renders evaluation curves (ROC, TOC, DET, Precision-Recall, Calibration) from logged metrics."""
-
     THRESHOLD_PATTERN: re.Pattern[str] = re.compile(r"^(tp|fp|tn|fn)_t(\d+)$")
     CALIBRATION_PATTERN: re.Pattern[str] = re.compile(r"^cal_(conf|acc)_(\d+)$")
+    PRIMARY_SPLIT: str = "test"
+    FALLBACK_SPLIT: str = "val"
 
     def __init__(
         self,
@@ -25,7 +25,8 @@ class CurveGraphPlotter(Plotter):
         calibration: bool = False,
     ) -> None:
         """
-        Initialize the curve plotter with the desired curve types enabled.
+        Renders evaluation curves from logged metrics.
+        Currently supports ROC, TOC, DET, Precision-Recall, Calibratio.
 
         Args:
             roc: Whether to render Receiver Operating Characteristic (ROC) curves.
@@ -53,47 +54,23 @@ class CurveGraphPlotter(Plotter):
         """Return True if any threshold-based curve (ROC, TOC, DET, PR) is enabled."""
         return any((self.roc, self.toc, self.det, self.pr))
 
-    def plot(
+    def _validate_curve_requirements(
         self,
-        metrics: ParsedMetrics | Sequence[ParsedMetrics],
-        metric_names: list[str] | None = None,
-        output_dir: str | Path | None = None,
-        create_subfolder: bool = True,
-    ) -> list[Path]:
-        """
-        Render and save enabled evaluation curves for validation and test splits.
-
-        Args:
-            metrics: Single ParsedMetrics or sequence of metrics to plot.
-            metric_names: Optional subset of metric variables to validate against.
-            output_dir: Optional destination path for plot outputs.
-            create_subfolder: Whether to save inside a 'plots' subfolder.
-
-        Returns:
-            saved_plots: List of file paths to saved curve PNG files.
-
-        Raises:
-            ValueError: If required thresholded or calibration metrics are missing.
-            ImportError: If matplotlib is not installed.
-        """
-        plt = self._init_plotting()
-        metrics_list = self._normalize_metrics(metrics)
-        self._validate_metrics_list(metrics_list)
-
+        metrics_list: list[ParsedMetrics],
+        metric_names: list[str] | None,
+    ) -> tuple[list[int], list[int]]:
+        """Validate required threshold and calibration keys across all runs."""
         threshold_counts: list[int] = []
         calibration_bins: list[int] = []
+        requested = set(metric_names) if metric_names is not None else None
 
         for m in metrics_list:
             if self._needs_threshold_metrics:
                 n_thresh = self._detect_threshold_count(m)
                 threshold_counts.append(n_thresh)
-                if metric_names is not None:
-                    req = {
-                        f"{k}_t{i}"
-                        for i in range(n_thresh)
-                        for k in ("tp", "fp", "tn", "fn")
-                    }
-                    if not req.issubset(set(metric_names)):
+                if requested is not None:
+                    req = {f"{k}_t{i}" for i in range(n_thresh) for k in ("tp", "fp", "tn", "fn")}
+                    if not req.issubset(requested):
                         raise ValueError(
                             "metric_names must include all required thresholded "
                             "(tp_t*, fp_t*, tn_t*, fn_t*) keys."
@@ -102,17 +79,34 @@ class CurveGraphPlotter(Plotter):
             if self.calibration:
                 n_bins = self._detect_calibration_bins(m)
                 calibration_bins.append(n_bins)
-                if metric_names is not None:
-                    req = {
-                        f"cal_{k}_{b}"
-                        for b in range(n_bins)
-                        for k in ("conf", "acc")
-                    }
-                    if not req.issubset(set(metric_names)):
+                if requested is not None:
+                    req = {f"cal_{k}_{b}" for b in range(n_bins) for k in ("conf", "acc")}
+                    if not req.issubset(requested):
                         raise ValueError(
                             "metric_names must include all required calibration "
                             "(cal_conf_*, cal_acc_*) keys."
                         )
+
+        return threshold_counts, calibration_bins
+
+    def plot(
+        self,
+        metrics: ParsedMetrics | Sequence[ParsedMetrics],
+        metric_names: list[str] | None = None,
+        output_dir: str | Path | None = None,
+        create_subfolder: bool = True,
+    ) -> list[Path]:
+        """
+        Render and save enabled evaluation curves for test splits.
+        Fallback on latest val otherwise.
+        """
+        plt = self._init_plotting()
+        metrics_list = self._normalize_metrics(metrics)
+        self._validate_metrics_list(metrics_list)
+
+        threshold_counts, calibration_bins = self._validate_curve_requirements(
+            metrics_list, metric_names
+        )
 
         plots_dir = self._resolve_plots_dir(metrics_list, output_dir, create_subfolder)
         is_multi = len(metrics_list) > 1
@@ -127,53 +121,59 @@ class CurveGraphPlotter(Plotter):
 
         saved_plots: list[Path] = []
 
-        ##Prefers test, will fall back on val.
         if self._needs_threshold_metrics:
-            for split_name in ("test", "val"):
-                thresh_data = self._collect_threshold_data(
-                    metrics_list, threshold_counts, split_name
+            thresh_split, thresh_data = self._resolve_threshold_data(metrics_list, threshold_counts)
+            if thresh_data:
+                threshold_renderers = (
+                    (self.roc, self._render_roc),
+                    (self.pr, self._render_pr),
+                    (self.det, self._render_det),
+                    (self.toc, self._render_toc),
                 )
-                if thresh_data:
-                    if self.roc:
-                        saved_plots.append(
-                            self._render_roc(
-                                thresh_data, split_name, title_prefix, suffix, dest_dir, plt
-                            )
-                        )
-                    if self.pr:
-                        saved_plots.append(
-                            self._render_pr(
-                                thresh_data, split_name, title_prefix, suffix, dest_dir, plt
-                            )
-                        )
-                    if self.det:
-                        saved_plots.append(
-                            self._render_det(
-                                thresh_data, split_name, title_prefix, suffix, dest_dir, plt
-                            )
-                        )
-                    if self.toc:
-                        saved_plots.append(
-                            self._render_toc(
-                                thresh_data, split_name, title_prefix, suffix, dest_dir, plt
-                            )
-                        )
-                    break
+                saved_plots.extend(
+                    render_fn(thresh_data, thresh_split, title_prefix, suffix, dest_dir, plt)
+                    for enabled, render_fn in threshold_renderers
+                    if enabled
+                )
 
         if self.calibration:
-            for split_name in ("test", "val"):
-                cal_data = self._collect_calibration_data(
-                    metrics_list, calibration_bins, split_name
-                )
-                if cal_data:
-                    saved_plots.append(
-                        self._render_calibration(
-                            cal_data, split_name, title_prefix, suffix, dest_dir, plt
-                        )
+            cal_split, cal_data = self._resolve_calibration_data(metrics_list, calibration_bins)
+            if cal_data:
+                saved_plots.append(
+                    self._render_calibration(
+                        cal_data, cal_split, title_prefix, suffix, dest_dir, plt
                     )
-                    break
+                )
 
         return saved_plots
+
+    @classmethod
+    def _resolve_threshold_data(
+        cls,
+        metrics_list: list[ParsedMetrics],
+        threshold_counts: list[int],
+    ) -> tuple[str, list[tuple[str, dict[str, np.ndarray]]]]:
+        """Collect threshold metrics from the primary (test) split, falling back to val."""
+        test_data = cls._collect_threshold_data(metrics_list, threshold_counts, cls.PRIMARY_SPLIT)
+        if test_data:
+            return cls.PRIMARY_SPLIT, test_data
+
+        val_data = cls._collect_threshold_data(metrics_list, threshold_counts, cls.FALLBACK_SPLIT)
+        return cls.FALLBACK_SPLIT, val_data
+
+    @classmethod
+    def _resolve_calibration_data(
+        cls,
+        metrics_list: list[ParsedMetrics],
+        calibration_bins: list[int],
+    ) -> tuple[str, list[tuple[str, np.ndarray, np.ndarray, float | None]]]:
+        """Collect calibration metrics from the primary (test) split, falling back to val."""
+        test_data = cls._collect_calibration_data(metrics_list, calibration_bins, cls.PRIMARY_SPLIT)
+        if test_data:
+            return cls.PRIMARY_SPLIT, test_data
+
+        val_data = cls._collect_calibration_data(metrics_list, calibration_bins, cls.FALLBACK_SPLIT)
+        return cls.FALLBACK_SPLIT, val_data
 
     @classmethod
     def _detect_threshold_count(cls, parsed: ParsedMetrics) -> int:
@@ -186,9 +186,7 @@ class CurveGraphPlotter(Plotter):
         ]
         if indices:
             n_thresh = max(indices) + 1
-            expected = {
-                f"{k}_t{i}" for i in range(n_thresh) for k in ("tp", "fp", "tn", "fn")
-            }
+            expected = {f"{k}_t{i}" for i in range(n_thresh) for k in ("tp", "fp", "tn", "fn")}
             if n_thresh >= 2 and expected.issubset(names):
                 return n_thresh
 
@@ -209,9 +207,7 @@ class CurveGraphPlotter(Plotter):
         ]
         if indices:
             n_bins = max(indices) + 1
-            expected = {
-                f"cal_{k}_{b}" for b in range(n_bins) for k in ("conf", "acc")
-            }
+            expected = {f"cal_{k}_{b}" for b in range(n_bins) for k in ("conf", "acc")}
             if n_bins >= 2 and expected.issubset(names):
                 return n_bins
 
@@ -337,7 +333,9 @@ class CurveGraphPlotter(Plotter):
                 label=f"{run_label} (AUC = {auc_val:.4f})",
             )
 
-        ax.plot([0.0, 1.0], [0.0, 1.0], linestyle="--", color="#666666", linewidth=1.2, label="Random")
+        ax.plot(
+            [0.0, 1.0], [0.0, 1.0], linestyle="--", color="#666666", linewidth=1.2, label="Random"
+        )
         ax.set_xlim(0.0, 1.0)
         ax.set_ylim(0.0, 1.02)
         ax.set_xlabel("False Positive Rate (FPR)")

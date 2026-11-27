@@ -119,7 +119,7 @@ def test_detect_matrix_mode_raises_on_unrelated_metrics(tmp_path: Path) -> None:
         ConfusionMatrixPlotter._detect_matrix_mode(parsed)
 
 
-""" Grid dimensions & matrix extraction"""
+"""Grid dimensions & matrix extraction"""
 
 
 @pytest.mark.parametrize(
@@ -170,18 +170,16 @@ def test_extract_split_matrix_returns_none_when_split_missing(tmp_path: Path) ->
 """Rendering"""
 
 
-def test_plot_single_binary_run(tmp_path: Path) -> None:
-    parsed = _make_binary_metrics(tmp_path, experiment_name="gcn_bin")
+def test_plot_single_binary_run_prefers_test(tmp_path: Path) -> None:
+    parsed = _make_binary_metrics(tmp_path, experiment_name="gcn_bin", splits=("val", "test"))
     plotter = ConfusionMatrixPlotter()
 
     saved = plotter.plot(parsed)
 
-    assert len(saved) == 2
-    names = {p.name for p in saved}
-    assert names == {"ConfusionMatrix_val_gcn_bin.png", "ConfusionMatrix_test_gcn_bin.png"}
-    for path in saved:
-        assert path.exists()
-        assert path.stat().st_size > 0
+    assert len(saved) == 1
+    assert saved[0].name == "ConfusionMatrix_test_gcn_bin.png"
+    assert saved[0].exists()
+    assert saved[0].stat().st_size > 0
 
 
 @pytest.mark.parametrize("num_classes", [3, 7])
@@ -195,10 +193,10 @@ def test_plot_single_multiclass_run(tmp_path: Path, num_classes: int) -> None:
 
     saved = plotter.plot(parsed)
 
-    assert len(saved) == 2
-    for path in saved:
-        assert path.exists()
-        assert path.stat().st_size > 0
+    assert len(saved) == 1
+    assert saved[0].name == f"ConfusionMatrix_test_gcn_mc_{num_classes}.png"
+    assert saved[0].exists()
+    assert saved[0].stat().st_size > 0
 
 
 def test_plot_multi_run_comparison_grid(tmp_path: Path) -> None:
@@ -207,12 +205,11 @@ def test_plot_multi_run_comparison_grid(tmp_path: Path) -> None:
 
     saved = plotter.plot(runs, output_dir=tmp_path)
 
-    assert len(saved) == 2
-    for path in saved:
-        assert path.parent == tmp_path / "plots" / "comparison"
-        assert path.name.endswith("_comparison.png")
-        assert path.exists()
-        assert path.stat().st_size > 0
+    assert len(saved) == 1
+    assert saved[0].parent == tmp_path / "plots" / "comparison"
+    assert saved[0].name == "ConfusionMatrix_test_comparison.png"
+    assert saved[0].exists()
+    assert saved[0].stat().st_size > 0
 
 
 def test_plot_without_subfolder(tmp_path: Path) -> None:
@@ -223,17 +220,17 @@ def test_plot_without_subfolder(tmp_path: Path) -> None:
     plotter = ConfusionMatrixPlotter()
     saved = plotter.plot(parsed, output_dir=out_dir, create_subfolder=False)
 
-    assert len(saved) == 2
-    assert all(p.parent == out_dir for p in saved)
+    assert len(saved) == 1
+    assert saved[0].parent == out_dir
 
 
-def test_plot_handles_only_one_split_or_no_eval_splits(tmp_path: Path) -> None:
+def test_plot_falls_back_to_val_and_handles_no_eval_splits(tmp_path: Path) -> None:
     plotter = ConfusionMatrixPlotter()
 
     val_only = _make_binary_metrics(tmp_path, experiment_name="val_only", splits=("val",))
     saved_val = plotter.plot(val_only)
     assert len(saved_val) == 1
-    assert "val" in saved_val[0].name
+    assert saved_val[0].name == "ConfusionMatrix_val_val_only.png"
 
     train_only = _make_binary_metrics(tmp_path, experiment_name="train_only", splits=("train",))
     saved_none = plotter.plot(train_only)
@@ -248,8 +245,8 @@ def test_plot_handles_zero_row_sums_safely(tmp_path: Path) -> None:
     )
     plotter = ConfusionMatrixPlotter()
     saved = plotter.plot(parsed)
-    assert len(saved) == 2
-    assert all(p.exists() for p in saved)
+    assert len(saved) == 1
+    assert saved[0].exists()
 
 
 def test_plot_metric_names_validation(tmp_path: Path) -> None:
@@ -257,7 +254,7 @@ def test_plot_metric_names_validation(tmp_path: Path) -> None:
     plotter = ConfusionMatrixPlotter()
 
     saved = plotter.plot(parsed, metric_names=["tp", "fp", "tn", "fn"])
-    assert len(saved) == 2
+    assert len(saved) == 1
 
     with pytest.raises(ValueError, match="metric_names must include all required"):
         plotter.plot(parsed, metric_names=["tp", "fp"])

@@ -25,7 +25,8 @@ from hypertorch.types import ModelConfig
 class MulticlassThresholdStatCell(Metric):
     """Logs micro-averaged OvR scalar (tp, fp, tn, or fn) at a fixed probability threshold."""
 
-    full_state_update: bool = False
+    full_state_update: bool | None = False
+    count: Tensor
 
     def __init__(self, num_classes: int, threshold: float, stat: str) -> None:
         super().__init__()
@@ -57,7 +58,10 @@ class MulticlassThresholdStatCell(Metric):
 class MulticlassCalibrationBinMetric(Metric):
     """Logs mean top-label confidence or empirical accuracy for one probability bin."""
 
-    full_state_update: bool = False
+    full_state_update: bool | None = False
+    total_conf: Tensor
+    total_correct: Tensor
+    count: Tensor
 
     def __init__(self, bin_idx: int, num_bins: int, mode: str) -> None:
         super().__init__()

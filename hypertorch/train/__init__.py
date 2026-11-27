@@ -33,5 +33,5 @@ __all__ = [
     "MultiModelTrainer",
     "Plotter",
     "ScatterPlotter",
-    "colorize_metric_value"
+    "colorize_metric_value",
 ]

@@ -15,6 +15,8 @@ class ConfusionMatrixPlotter(Plotter):
 
     BINARY_METRICS: tuple[str, ...] = ("tp", "fp", "tn", "fn")
     CELL_PATTERN: re.Pattern[str] = re.compile(r"^cm_(\d+)_(\d+)$")
+    PRIMARY_SPLIT: str = "test"
+    FALLBACK_SPLIT: str = "val"
 
     def plot(
         self,
@@ -24,21 +26,8 @@ class ConfusionMatrixPlotter(Plotter):
         create_subfolder: bool = True,
     ) -> list[Path]:
         """
-        Render and save confusion matrices using either binary (tp, fp, tn, fn)
-        or multiclass (cm_i_j) logged metrics.
-
-        Args:
-            metrics: Single ParsedMetrics or sequence of metrics to plot.
-            metric_names: Optional subset of metric variables to plot.
-            output_dir: Optional destination path for plot outputs.
-            create_subfolder: Whether to save inside a 'plots' subfolder.
-
-        Returns:
-            saved_plots: List of file paths to saved confusion matrix PNG files.
-
-        Raises:
-            ValueError: If ParsedMetrics lacks complete binary or multiclass confusion metrics.
-            ImportError: If matplotlib is not installed.
+        Render and save confusion matrices for the test split, falling back to val.
+        ...
         """
         plt = self._init_charting()
         metrics_list = self._normalize_metrics(metrics)
@@ -69,20 +58,48 @@ class ConfusionMatrixPlotter(Plotter):
             create_subfolder=create_subfolder,
         )
 
-        saved_plots: list[Path] = []
-        for split_name in ("val", "test"):
-            out_path = self._render_split_matrices(
-                split_name=split_name,
-                metrics_list=metrics_list,
-                modes=modes,
-                dest_dir=dest_dir,
-                suffix=suffix,
-                plt=plt,
-            )
-            if out_path is not None:
-                saved_plots.append(out_path)
+        split_name, valid_matrices = self._resolve_split_matrices(metrics_list, modes)
+        if not valid_matrices:
+            return []
 
-        return saved_plots
+        out_path = self._render_split_matrices(
+            split_name=split_name,
+            valid_matrices=valid_matrices,
+            dest_dir=dest_dir,
+            suffix=suffix,
+            plt=plt,
+        )
+        return [out_path]
+
+    @classmethod
+    def _resolve_split_matrices(
+        cls,
+        metrics_list: list[ParsedMetrics],
+        modes: list[tuple[Literal["binary", "multiclass"], int]],
+    ) -> tuple[str, list[tuple[str, np.ndarray]]]:
+        """Collect confusion matrices from the primary split, falling back to val."""
+        test_matrices = cls._collect_split_matrices(metrics_list, modes, cls.PRIMARY_SPLIT)
+        if test_matrices:
+            return cls.PRIMARY_SPLIT, test_matrices
+
+        val_matrices = cls._collect_split_matrices(metrics_list, modes, cls.FALLBACK_SPLIT)
+        return cls.FALLBACK_SPLIT, val_matrices
+
+    @classmethod
+    def _collect_split_matrices(
+        cls,
+        metrics_list: list[ParsedMetrics],
+        modes: list[tuple[Literal["binary", "multiclass"], int]],
+        split_name: str,
+    ) -> list[tuple[str, np.ndarray]]:
+        """Extract confusion matrices for all runs containing the given split."""
+        valid_matrices: list[tuple[str, np.ndarray]] = []
+        for idx, (m, (mode, num_classes)) in enumerate(zip(metrics_list, modes, strict=True)):
+            matrix = cls._extract_split_matrix(m, split_name, mode, num_classes)
+            if matrix is not None:
+                label = m.experiment_name or f"run_{idx}"
+                valid_matrices.append((label, matrix))
+        return valid_matrices
 
     @classmethod
     def _required_keys(
@@ -198,23 +215,12 @@ class ConfusionMatrixPlotter(Plotter):
     def _render_split_matrices(
         self,
         split_name: str,
-        metrics_list: list[ParsedMetrics],
-        modes: list[tuple[Literal["binary", "multiclass"], int]],
+        valid_matrices: list[tuple[str, np.ndarray]],
         dest_dir: Path,
         suffix: str,
         plt: Any,
-    ) -> Path | None:
+    ) -> Path:
         """Render a grid of confusion matrix heatmaps for one evaluation split."""
-        valid_matrices: list[tuple[str, np.ndarray]] = []
-        for idx, (m, (mode, num_classes)) in enumerate(zip(metrics_list, modes, strict=True)):
-            matrix = self._extract_split_matrix(m, split_name, mode, num_classes)
-            if matrix is not None:
-                label = m.experiment_name or f"run_{idx}"
-                valid_matrices.append((label, matrix))
-
-        if not valid_matrices:
-            return None
-
         n_plots = len(valid_matrices)
         n_cols, n_rows = self._calculate_grid_dims(n_plots)
         max_classes = max(matrix.shape[0] for _, matrix in valid_matrices)
@@ -244,7 +250,7 @@ class ConfusionMatrixPlotter(Plotter):
             for row in range(num_classes):
                 for col in range(num_classes):
                     count_val: int = round(matrix[row, col])
-                    pct_val: int = norm_matrix[row, col] * 100.0
+                    pct_val: float = norm_matrix[row, col] * 100.0
                     text_color: str = "white" if norm_matrix[row, col] > 0.55 else "black"
                     ax.text(
                         col,
